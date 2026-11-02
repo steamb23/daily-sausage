@@ -1,0 +1,55 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Daily Sausage",
+  "mainBinaryName": "daily-sausage",
+  "version": "0.1.0",
+  "identifier": "io.github.steamb23.dailysausage",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Daily Sausage",
+        "width": 360,
+        "height": 540,
+        "resizable": false,
+        "decorations": false,
+        "visible": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "app", "dmg"],
+    "category": "Utility",
+    "shortDescription": "Claude 주간 사용량을 오늘 예산으로 보여주는 트레이 앱",
+    "longDescription": "Daily Sausage는 Claude 구독의 주간 사용량 한도를 하루 단위 예산으로 나눠서 트레이에 보여주는 서드파티 프로그램입니다. Anthropic이 만들거나 보증한 프로그램이 아닙니다.",
+    "copyright": "MIT License",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    }
+  }
+}
