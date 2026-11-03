@@ -3,7 +3,7 @@ use crate::state::{lock, AppState, Snapshot};
 use crate::tray;
 use chrono::Utc;
 use daily_sausage_core::claude_settings::{self, InstallPreview};
-use daily_sausage_core::schedule::PollSchedule;
+use daily_sausage_core::schedule::{CliRefreshGate, PollSchedule};
 use daily_sausage_core::Config;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
@@ -31,9 +31,12 @@ pub fn set_config(
     // Owned by the status line installer, not by the settings form.
     new.chain_command = old.chain_command.clone();
     new.original_statusline = old.original_statusline.clone();
+    // Only set by editing config.json.
+    new.claude_path = old.claude_path.clone();
 
     if new.oauth_enabled != old.oauth_enabled {
         *lock(&state.oauth) = PollSchedule::default();
+        *lock(&state.cli_refresh) = CliRefreshGate::default();
     }
     if new.autostart != old.autostart {
         let al = app.autolaunch();
@@ -50,6 +53,9 @@ pub fn set_config(
     if new.oauth_enabled && !old.oauth_enabled {
         state.force_poll.store(true, Ordering::SeqCst);
     }
+    // Show the new settings' status right away; a poll that refreshes the
+    // login through Claude Code can take several seconds.
+    refresh_view(&app);
     state.wake.notify_one();
     Ok(new)
 }

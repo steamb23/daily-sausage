@@ -8,6 +8,8 @@ use serde::Serialize;
 
 const MAX_BACKOFF_SECS: i64 = 30 * 60;
 const MIN_FORCED_GAP_SECS: i64 = 60;
+const CLI_REFRESH_GAP_SECS: i64 = 30 * 60;
+const CLI_REFRESH_FORCED_GAP_SECS: i64 = 2 * 60;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PollOutcome {
@@ -106,6 +108,33 @@ impl PollSchedule {
     }
 }
 
+/// How often an expired login may be handed to Claude Code for refreshing:
+/// once every 30 minutes, or every 2 minutes when the popup asks for fresh
+/// data. A refresh that works is needed only once per token lifetime, so this
+/// only limits retries when it keeps failing.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct CliRefreshGate {
+    pub last_attempt: Option<DateTime<Utc>>,
+}
+
+impl CliRefreshGate {
+    pub fn allows(&self, now: DateTime<Utc>, force: bool) -> bool {
+        let Some(last) = self.last_attempt else {
+            return true;
+        };
+        let gap = if force {
+            CLI_REFRESH_FORCED_GAP_SECS
+        } else {
+            CLI_REFRESH_GAP_SECS
+        };
+        (now - last).num_seconds() >= gap
+    }
+
+    pub fn record(&mut self, now: DateTime<Utc>) {
+        self.last_attempt = Some(now);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -190,5 +219,17 @@ mod tests {
         let mut s = PollSchedule::default();
         s.record(at(2, 10, 0), 5, PollOutcome::Forbidden("no".into()));
         assert!(!s.due(at(3, 10, 0), true, &kst(), 0));
+    }
+
+    #[test]
+    fn cli_refresh_gate_limits_retries() {
+        let mut g = CliRefreshGate::default();
+        assert!(g.allows(at(2, 10, 0), false));
+        g.record(at(2, 10, 0));
+        assert!(!g.allows(at(2, 10, 5), false));
+        assert!(!g.allows(at(2, 10, 1), true));
+        assert!(g.allows(at(2, 10, 2), true));
+        assert!(!g.allows(at(2, 10, 29), false));
+        assert!(g.allows(at(2, 10, 30), false));
     }
 }

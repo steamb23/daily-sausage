@@ -223,6 +223,7 @@ function oauthBlock(c: Config): HTMLElement {
       {},
       h("li", {}, "Anthropic이 언제든 바꾸거나 막을 수 있어요."),
       h("li", {}, "로그인 토큰은 이 PC의 메모리에서만 쓰고, 저장하거나 다른 곳으로 보내지 않아요."),
+      h("li", {}, "로그인이 만료되면 Claude Code를 창 없이 실행해서 Claude Code가 직접 갱신하게 해요. 이 앱이 토큰을 갱신하거나 저장하지는 않아요."),
       h("li", {}, "약관상 회색지대일 수 있으니 본인 판단으로 켜 주세요."),
       h("li", {}, "macOS에서는 처음 한 번 키체인 접근 허용 창이 떠요. '항상 허용'을 누르면 돼요."),
     ),
@@ -241,7 +242,19 @@ function oauthBlock(c: Config): HTMLElement {
           (v) => save({ poll_minutes: Number(v) }),
         ),
       ),
+      field(
+        "만료되면 Claude Code로 자동 갱신",
+        checkbox(c.cli_refresh, (v) => save({ cli_refresh: v })),
+        "로그인이 만료되면 claude auth status를 창 없이 실행해서 Claude Code가 직접 로그인을 갱신하게 해요. 메시지를 보내지 않아서 사용량은 쓰지 않아요.",
+      ),
     );
+    if (c.cli_refresh && snapshot) {
+      wrap.append(
+        snapshot.claude_cli
+          ? h("p", { class: "help" }, `Claude Code: ${snapshot.claude_cli}`)
+          : h("p", { class: "warn-text" }, "Claude Code 실행 파일을 찾지 못했어요. config.json의 claude_path에 경로를 적고 앱을 다시 시작해 주세요."),
+      );
+    }
     const msg = snapshot?.oauth.message;
     if (msg) wrap.append(h("p", { class: "warn-text" }, msg));
   }

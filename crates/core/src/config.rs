@@ -19,6 +19,12 @@ pub struct Config {
     pub oauth_acknowledged: bool,
     /// Minutes between unofficial endpoint polls (2-15).
     pub poll_minutes: u32,
+    /// When the stored login has expired, run `claude auth status` so Claude
+    /// Code refreshes it itself (see `claude_cli`).
+    pub cli_refresh: bool,
+    /// Path to the `claude` executable when it is not found automatically.
+    /// Set by editing `config.json`; the settings form does not change it.
+    pub claude_path: Option<String>,
     pub notify_today_80: bool,
     pub notify_today_100: bool,
     pub notify_five_hour_90: bool,
@@ -41,6 +47,8 @@ impl Default for Config {
             oauth_enabled: false,
             oauth_acknowledged: false,
             poll_minutes: 5,
+            cli_refresh: true,
+            claude_path: None,
             notify_today_80: true,
             notify_today_100: true,
             notify_five_hour_90: true,
@@ -60,6 +68,10 @@ impl Config {
         if !self.oauth_acknowledged {
             self.oauth_enabled = false;
         }
+        self.claude_path = self
+            .claude_path
+            .map(|p| p.trim().to_owned())
+            .filter(|p| !p.is_empty());
         self
     }
 
@@ -112,6 +124,12 @@ mod tests {
         assert_eq!(c.boundary_hour, 23);
         assert_eq!(c.poll_minutes, 2);
         assert!(!c.oauth_enabled, "oauth needs acknowledgement");
+        let c = Config {
+            claude_path: Some("  ".into()),
+            ..Config::default()
+        }
+        .sanitized();
+        assert_eq!(c.claude_path, None);
     }
 
     #[test]

@@ -58,6 +58,7 @@ export interface Snapshot {
   oauth: PollSchedule;
   oauth_enabled: boolean;
   statusline: StatuslineState;
+  claude_cli: string | null;
 }
 
 export type Mode = "rolling" | "fixed";
@@ -68,6 +69,8 @@ export interface Config {
   oauth_enabled: boolean;
   oauth_acknowledged: boolean;
   poll_minutes: number;
+  cli_refresh: boolean;
+  claude_path: string | null;
   notify_today_80: boolean;
   notify_today_100: boolean;
   notify_five_hour_90: boolean;
