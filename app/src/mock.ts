@@ -39,6 +39,7 @@ export function mockSnapshot(): Snapshot {
     oauth: { next_due: null, backoff_secs: 0, last_attempt: null, last_ok: null, message: null, stopped: false },
     oauth_enabled: true,
     statusline: { state: "installed", command: '"/Applications/Daily Sausage.app/Contents/MacOS/daily-sausage" collect' },
+    claude_cli: "/Users/me/.local/bin/claude",
   };
   if (state === "over") {
     const t = base.model.today!;
@@ -83,6 +84,8 @@ export function mockConfig(): Config {
     oauth_enabled: false,
     oauth_acknowledged: false,
     poll_minutes: 5,
+    cli_refresh: true,
+    claude_path: null,
     notify_today_80: true,
     notify_today_100: true,
     notify_five_hour_90: true,

@@ -1,7 +1,8 @@
 //! Reads Claude Code's stored claude.ai login, only for the optional unofficial
 //! usage endpoint. The token stays in memory: it is never written, logged or
 //! sent anywhere but api.anthropic.com. It is never refreshed here either, since
-//! refreshing would rotate the refresh token under Claude Code.
+//! refreshing would rotate the refresh token under Claude Code; when it expires
+//! the app asks Claude Code to refresh it instead (`claude_cli`).
 
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use serde_json::Value;

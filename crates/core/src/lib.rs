@@ -3,6 +3,8 @@
 //! so everything is unit-testable.
 
 pub mod budget;
+#[cfg(feature = "oauth")]
+pub mod claude_cli;
 pub mod claude_settings;
 pub mod collect;
 pub mod config;

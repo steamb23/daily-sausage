@@ -1,6 +1,6 @@
 use daily_sausage_core::claude_settings::StatuslineState;
 use daily_sausage_core::format::{NotifyState, PopupModel};
-use daily_sausage_core::schedule::PollSchedule;
+use daily_sausage_core::schedule::{CliRefreshGate, PollSchedule};
 use daily_sausage_core::{paths, Config, Store};
 use serde::Serialize;
 use std::path::PathBuf;
@@ -17,6 +17,9 @@ pub struct Snapshot {
     pub oauth: PollSchedule,
     pub oauth_enabled: bool,
     pub statusline: StatuslineState,
+    /// The `claude` executable used to refresh an expired login, when that is
+    /// enabled and one was found.
+    pub claude_cli: Option<String>,
 }
 
 pub struct AppState {
@@ -25,6 +28,8 @@ pub struct AppState {
     pub config: Mutex<Config>,
     pub notify: Mutex<NotifyState>,
     pub oauth: Mutex<PollSchedule>,
+    /// Limits how often Claude Code is asked to refresh an expired login.
+    pub cli_refresh: Mutex<CliRefreshGate>,
     pub snapshot: Mutex<Option<Snapshot>>,
     /// Wakes the poller before its next 30-second tick.
     pub wake: tokio::sync::Notify,
@@ -56,6 +61,7 @@ impl AppState {
             config: Mutex::new(Config::load(&data_dir)),
             notify: Mutex::new(notify),
             oauth: Mutex::new(PollSchedule::default()),
+            cli_refresh: Mutex::new(CliRefreshGate::default()),
             snapshot: Mutex::new(None),
             wake: tokio::sync::Notify::new(),
             force_poll: AtomicBool::new(false),
