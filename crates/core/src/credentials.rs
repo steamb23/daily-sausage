@@ -40,6 +40,9 @@ pub enum CredError {
     NotFound,
     /// A login exists but is not a claude.ai subscription login.
     NoOauth,
+    /// The claude.ai login is still there but its tokens are empty. Claude
+    /// Code clears them this way when its refresh token is rejected.
+    LoggedOut,
     Unreadable(String),
 }
 
@@ -48,6 +51,10 @@ impl fmt::Display for CredError {
         match self {
             CredError::NotFound => write!(f, "Claude Code 로그인 정보를 찾지 못했어요"),
             CredError::NoOauth => write!(f, "claude.ai 구독 로그인이 아니에요"),
+            CredError::LoggedOut => write!(
+                f,
+                "Claude Code 로그인이 풀렸어요. Claude Code에서 /login으로 다시 로그인해 주세요"
+            ),
             CredError::Unreadable(e) => write!(f, "로그인 정보를 읽지 못했어요: {e}"),
         }
     }
@@ -61,9 +68,11 @@ pub fn parse(json: &str) -> Result<OauthToken, CredError> {
     let access_token = o
         .get("accessToken")
         .and_then(Value::as_str)
-        .filter(|s| !s.is_empty())
-        .ok_or(CredError::NoOauth)?
-        .to_owned();
+        .ok_or(CredError::NoOauth)?;
+    if access_token.is_empty() {
+        return Err(CredError::LoggedOut);
+    }
+    let access_token = access_token.to_owned();
     let expires_at = o
         .get("expiresAt")
         .and_then(Value::as_i64)
@@ -83,8 +92,9 @@ pub fn credentials_file() -> PathBuf {
     crate::paths::claude_config_dir().join(".credentials.json")
 }
 
+/// `None` when there is no Keychain item.
 #[cfg(target_os = "macos")]
-fn from_keychain() -> Option<OauthToken> {
+fn from_keychain() -> Option<Result<OauthToken, CredError>> {
     let out = std::process::Command::new("/usr/bin/security")
         .args([
             "find-generic-password",
@@ -97,21 +107,30 @@ fn from_keychain() -> Option<OauthToken> {
     if !out.status.success() {
         return None;
     }
-    parse(&String::from_utf8_lossy(&out.stdout)).ok()
+    Some(parse(&String::from_utf8_lossy(&out.stdout)))
 }
 
 /// macOS: Keychain first (Claude Code's default), then the file fallback.
 /// Windows/Linux: `~/.claude/.credentials.json` (or under `CLAUDE_CONFIG_DIR`).
 pub fn load() -> Result<OauthToken, CredError> {
     #[cfg(target_os = "macos")]
-    if let Some(t) = from_keychain() {
+    let keychain = from_keychain();
+    #[cfg(target_os = "macos")]
+    if let Some(Ok(t)) = keychain {
         return Ok(t);
     }
-    match std::fs::read_to_string(credentials_file()) {
+    let file = match std::fs::read_to_string(credentials_file()) {
         Ok(s) => parse(&s),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(CredError::NotFound),
         Err(e) => Err(CredError::Unreadable(e.to_string())),
+    };
+    // With no file to fall back on, say what is wrong with the Keychain login
+    // (for example that it was cleared) instead of "not found".
+    #[cfg(target_os = "macos")]
+    if let (Err(CredError::NotFound), Some(Err(e))) = (&file, keychain) {
+        return Err(e);
     }
+    file
 }
 
 #[cfg(test)]
@@ -145,6 +164,15 @@ mod tests {
     #[test]
     fn rejects_non_oauth() {
         assert_eq!(parse(r#"{"apiKey":"x"}"#), Err(CredError::NoOauth));
+        assert_eq!(parse(r#"{"claudeAiOauth":{}}"#), Err(CredError::NoOauth));
         assert!(matches!(parse("nope"), Err(CredError::Unreadable(_))));
+    }
+
+    #[test]
+    fn cleared_login_is_logged_out() {
+        // What Claude Code 2.1.318 leaves after its refresh token is rejected.
+        let cleared = r#"{"claudeAiOauth":{"accessToken":"","refreshToken":"","expiresAt":0,"scopes":["user:inference","user:profile","user:sessions:claude_code"],"subscriptionType":"max"}}"#;
+        assert_eq!(parse(cleared), Err(CredError::LoggedOut));
+        assert!(CredError::LoggedOut.to_string().contains("/login"));
     }
 }
