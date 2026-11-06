@@ -1,11 +1,14 @@
 //! Lets Claude Code refresh its own claude.ai login when the stored token has
 //! expired, so this app never touches the refresh token.
 //!
-//! `claude auth status` refreshes an expired (or nearly expired) login while it
-//! starts, then saves the new tokens with Claude Code's own locking and storage
-//! (file or macOS Keychain). It sends no message and uses no subscription usage.
-//! This is how Claude Code behaves, not a documented contract, so a future
-//! version may stop doing it; the caller re-reads the login to find out.
+//! `claude -p /usage` runs Claude Code's own usage command headless. Claude Code
+//! refreshes an expired (or nearly expired) login while it starts, and the
+//! command reads the same usage endpoint this app polls, so it needs a valid
+//! login either way. The new tokens are saved with Claude Code's own locking
+//! and storage (file or macOS Keychain). `/usage` is a local command: it sends
+//! no message and uses no subscription usage. This is how Claude Code behaves,
+//! not a documented contract, so a future version may stop doing it; the
+//! caller re-reads the login to find out.
 
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -14,7 +17,24 @@ use std::time::{Duration, Instant};
 
 /// Well past Claude Code's own exit wait (about 8.5 s) and its refresh lock
 /// retries (about 10 s), so a refresh in progress is not cut off.
-pub const AUTH_STATUS_TIMEOUT: Duration = Duration::from_secs(30);
+pub const REFRESH_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// `claude -p /usage`, plus flags that keep the run from leaving a trace:
+/// no saved session (it would show up in `claude --resume`) and none of the
+/// user's MCP servers started. Claude Code exits on a flag it does not know,
+/// before refreshing anything, so only long-standing flags belong here.
+const REFRESH_ARGS: &[&str] = &[
+    "-p",
+    "/usage",
+    "--no-session-persistence",
+    "--strict-mcp-config",
+];
+
+/// Safe mode also skips the user's hooks and plugins, so a SessionStart hook
+/// does not fire every time the login expires. Set as a variable rather than
+/// `--safe-mode` because a Claude Code too old to know it ignores the variable
+/// but would reject the flag. Auth, proxies and other `env` settings still apply.
+const SAFE_MODE_VAR: (&str, &str) = ("CLAUDE_CODE_SAFE_MODE", "1");
 
 /// Variables that make Claude Code use another credential than the stored
 /// login; with any of them set it would not refresh that login.
@@ -50,11 +70,7 @@ impl fmt::Display for CliError {
             CliError::Timeout => write!(
                 f,
                 "Claude Code가 {}초 안에 끝나지 않았어요",
-                AUTH_STATUS_TIMEOUT.as_secs()
-            ),
-            CliError::Exit(Some(1)) => write!(
-                f,
-                "Claude Code가 로그인 상태를 확인하지 못했어요. Claude Code에서 /login으로 다시 로그인해 주세요"
+                REFRESH_TIMEOUT.as_secs()
             ),
             CliError::Exit(Some(c)) => write!(f, "Claude Code가 종료 코드 {c}로 끝났어요"),
             CliError::Exit(None) => write!(f, "Claude Code가 비정상적으로 끝났어요"),
@@ -125,11 +141,12 @@ pub fn find_claude(override_path: Option<&str>) -> Option<PathBuf> {
     find_in(&dirs, EXE_NAMES)
 }
 
-/// Runs `exe auth status --json` without a window and waits up to `timeout`.
-/// Output is discarded.
-pub fn run_auth_status(exe: &Path, cwd: &Path, timeout: Duration) -> Result<(), CliError> {
+/// Runs `exe -p /usage` (see `REFRESH_ARGS`) without a window and waits up to
+/// `timeout`. Output is discarded.
+pub fn run_usage(exe: &Path, cwd: &Path, timeout: Duration) -> Result<(), CliError> {
     let mut cmd = Command::new(exe);
-    cmd.args(["auth", "status", "--json"])
+    cmd.args(REFRESH_ARGS)
+        .env(SAFE_MODE_VAR.0, SAFE_MODE_VAR.1)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -166,7 +183,7 @@ pub fn run_auth_status(exe: &Path, cwd: &Path, timeout: Duration) -> Result<(), 
 /// login afterwards to see whether it actually changed.
 pub fn refresh_login(override_path: Option<&str>, cwd: &Path) -> Result<(), CliError> {
     let exe = find_claude(override_path).ok_or(CliError::NotFound)?;
-    run_auth_status(&exe, cwd, AUTH_STATUS_TIMEOUT)
+    run_usage(&exe, cwd, REFRESH_TIMEOUT)
 }
 
 #[cfg(test)]
@@ -187,14 +204,14 @@ mod tests {
     #[cfg(unix)]
     fn run(exe: &Path, cwd: &Path, timeout: Duration) -> Result<(), CliError> {
         for _ in 0..20 {
-            match run_auth_status(exe, cwd, timeout) {
+            match run_usage(exe, cwd, timeout) {
                 Err(CliError::Spawn(e)) if e.contains("os error 26") => {
                     std::thread::sleep(Duration::from_millis(50))
                 }
                 r => return r,
             }
         }
-        run_auth_status(exe, cwd, timeout)
+        run_usage(exe, cwd, timeout)
     }
 
     #[cfg(unix)]
@@ -227,28 +244,31 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn runs_auth_status_in_cwd() {
+    fn runs_usage_in_cwd_in_safe_mode() {
         let d = tempfile::tempdir().unwrap();
         let out = d.path().join("out.txt");
         let exe = script(
             d.path(),
             "claude",
             &format!(
-                "echo \"$@\" > '{}'; pwd >> '{}'",
-                out.display(),
-                out.display()
+                "echo \"$@\" > '{o}'; pwd >> '{o}'; echo \"safe=$CLAUDE_CODE_SAFE_MODE\" >> '{o}'",
+                o = out.display()
             ),
         );
         let cwd = tempfile::tempdir().unwrap();
         assert_eq!(run(&exe, cwd.path(), Duration::from_secs(10)), Ok(()));
         let got = std::fs::read_to_string(&out).unwrap();
         let mut lines = got.lines();
-        assert_eq!(lines.next(), Some("auth status --json"));
+        assert_eq!(
+            lines.next(),
+            Some("-p /usage --no-session-persistence --strict-mcp-config")
+        );
         let pwd = PathBuf::from(lines.next().unwrap());
         assert_eq!(
             pwd.canonicalize().unwrap(),
             cwd.path().canonicalize().unwrap()
         );
+        assert_eq!(lines.next(), Some("safe=1"));
     }
 
     #[cfg(unix)]
@@ -272,7 +292,7 @@ mod tests {
     #[test]
     fn missing_executable_is_a_spawn_error() {
         let d = tempfile::tempdir().unwrap();
-        let r = run_auth_status(&d.path().join("missing"), d.path(), Duration::from_secs(1));
+        let r = run_usage(&d.path().join("missing"), d.path(), Duration::from_secs(1));
         assert!(matches!(r, Err(CliError::Spawn(_))), "{r:?}");
     }
 }

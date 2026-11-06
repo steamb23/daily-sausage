@@ -36,7 +36,7 @@ struct CliRefresh {
     cwd: PathBuf,
 }
 
-/// Runs `claude auth status` so Claude Code refreshes its own login, then
+/// Runs `claude -p /usage` so Claude Code refreshes its own login, then
 /// re-reads the login to see whether that worked.
 fn refresh_with_claude(cli: &CliRefresh) -> Result<OauthToken, String> {
     claude_cli::refresh_login(cli.claude_path.as_deref(), &cli.cwd).map_err(|e| {
