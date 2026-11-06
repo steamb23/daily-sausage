@@ -90,9 +90,11 @@ Claude Code의 `/usage` 명령이 내부적으로 호출하는 `https://api.anth
 
 - **읽는 위치:** Windows와 Linux는 `%USERPROFILE%\.claude\.credentials.json`(또는 `CLAUDE_CONFIG_DIR` 아래), macOS는 키체인 항목 `Claude Code-credentials`를 먼저 읽고 없으면 같은 파일을 읽습니다. macOS에서는 처음 한 번 키체인 접근 허용 창이 뜨는데, "항상 허용"을 누르면 됩니다.
 - **쓰는 방법:** 토큰은 메모리에서만 쓰고, 파일로 저장하거나 로그에 남기거나 `api.anthropic.com` 외의 곳으로 보내지 않습니다.
-- **갱신:** Daily Sausage는 토큰을 직접 갱신하지 않습니다. 직접 갱신하면 refresh token이 교체되어 Claude Code 로그인이 풀릴 수 있고, refresh token을 다루는 것 자체가 약관에서 금지하는 자격 증명 중개에 해당하기 때문입니다. 대신 토큰이 만료되면(만료 1분 전부터) Claude Code의 `claude auth status`를 창 없이 실행합니다. Claude Code는 시작할 때 만료된 로그인을 스스로 갱신하고 자기 방식(파일 또는 키체인, 잠금 포함)으로 저장하므로, Daily Sausage는 저장된 로그인을 다시 읽기만 합니다.
-  - 메시지를 보내지 않으므로 구독 사용량을 쓰지 않습니다.
+- **갱신:** Daily Sausage는 토큰을 직접 갱신하지 않습니다. 직접 갱신하면 refresh token이 교체되어 Claude Code 로그인이 풀릴 수 있고, refresh token을 다루는 것 자체가 약관에서 금지하는 자격 증명 중개에 해당하기 때문입니다. 대신 토큰이 만료되면(만료 1분 전부터) Claude Code의 `/usage` 명령을 `claude -p /usage`로 창 없이 실행합니다. Claude Code는 시작할 때 만료된 로그인을 스스로 갱신하고, `/usage`도 같은 사용량 API를 조회하므로 유효한 로그인이 필요합니다. 갱신된 로그인은 Claude Code가 자기 방식(파일 또는 키체인, 잠금 포함)으로 저장하고, Daily Sausage는 저장된 로그인을 다시 읽기만 합니다.
+  - `/usage`는 Claude Code 안에서 처리되는 명령이라 모델에 메시지를 보내지 않으므로, 구독 사용량을 쓰지 않습니다. 다만 `/usage` 명령이 없는 아주 오래된 Claude Code는 이 입력을 일반 메시지로 보낼 수 있으니, Claude Code를 최신 버전으로 유지해 주세요.
+  - 흔적이 남지 않도록 세션을 저장하지 않고(`--no-session-persistence`), MCP 서버를 띄우지 않으며(`--strict-mcp-config`), 안전 모드(`CLAUDE_CODE_SAFE_MODE=1`)로 실행해서 사용자 훅과 플러그인도 건너뜁니다. 프록시 같은 설정의 `env`는 그대로 적용됩니다.
   - 공식 기능이 아니라 Claude Code가 이렇게 동작한다는 점에 기대는 방식이라서, 이후 버전에서 동작이 바뀔 수 있습니다. 갱신되지 않으면 경고 문구가 뜨고, 이때는 Claude Code를 한 번 실행하면 다시 이어집니다.
+  - refresh token이 거절되면 Claude Code가 저장된 로그인을 스스로 지웁니다. 이때는 "Claude Code 로그인이 풀렸어요"라는 문구가 뜨고, Claude Code에서 `/login`으로 다시 로그인해야 이어집니다.
   - 실패가 반복되면 30분에 한 번(팝업을 열 때는 2분에 한 번)만 다시 시도합니다.
   - `claude` 실행 파일은 `PATH`와 일반적인 설치 위치(`~/.local/bin`, `~/.claude/local`, `/opt/homebrew/bin`, `/usr/local/bin`, Windows의 `%USERPROFILE%\.local\bin`, `%APPDATA%\npm`)에서 찾습니다. 찾지 못하면 `config.json`의 `claude_path`에 경로를 적고 앱을 다시 시작합니다.
   - 설정에서 **만료되면 Claude Code로 자동 갱신**을 끄면 예전처럼 조회만 건너뜁니다.
@@ -108,7 +110,7 @@ Claude Code의 `/usage` 명령이 내부적으로 호출하는 `https://api.anth
 | 요약 한 줄 표시 | 켜짐 | 기존 상태줄이 없을 때 Claude Code 상태줄에 요약을 보여줍니다. |
 | 사용량 API 조회 | 꺼짐 | 위의 비공식 경로입니다. 처음 켤 때 안내를 확인해야 합니다. |
 | 조회 간격 | 5분 | 2, 3, 5, 10, 15분 |
-| 만료되면 Claude Code로 자동 갱신 | 켜짐 | 로그인이 만료되면 `claude auth status`를 창 없이 실행해서 Claude Code가 직접 갱신하게 합니다. 사용량 API 조회를 켰을 때만 동작합니다. |
+| 만료되면 Claude Code로 자동 갱신 | 켜짐 | 로그인이 만료되면 `claude -p /usage`를 창 없이 실행해서 Claude Code가 직접 갱신하게 합니다. 사용량 API 조회를 켰을 때만 동작합니다. |
 | 알림 | 모두 켜짐 | 오늘 예산 80%, 오늘 예산 초과, 5시간 창 90% |
 | 로그인할 때 자동 시작 | 켜짐 | |
 

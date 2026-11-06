@@ -19,7 +19,7 @@ pub struct Config {
     pub oauth_acknowledged: bool,
     /// Minutes between unofficial endpoint polls (2-15).
     pub poll_minutes: u32,
-    /// When the stored login has expired, run `claude auth status` so Claude
+    /// When the stored login has expired, run `claude -p /usage` so Claude
     /// Code refreshes it itself (see `claude_cli`).
     pub cli_refresh: bool,
     /// Path to the `claude` executable when it is not found automatically.

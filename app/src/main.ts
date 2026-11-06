@@ -245,7 +245,7 @@ function oauthBlock(c: Config): HTMLElement {
       field(
         "만료되면 Claude Code로 자동 갱신",
         checkbox(c.cli_refresh, (v) => save({ cli_refresh: v })),
-        "로그인이 만료되면 claude auth status를 창 없이 실행해서 Claude Code가 직접 로그인을 갱신하게 해요. 메시지를 보내지 않아서 사용량은 쓰지 않아요.",
+        "로그인이 만료되면 claude -p /usage를 창 없이 실행해서 Claude Code가 직접 로그인을 갱신하게 해요. /usage는 Claude Code 안에서 처리되는 명령이라 메시지를 보내지 않고, 사용량도 쓰지 않아요.",
       ),
     );
     if (c.cli_refresh && snapshot) {
